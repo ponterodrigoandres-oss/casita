@@ -2,7 +2,7 @@
   "name": "Casita — Gastos en pareja",
   "short_name": "Casita",
   "description": "Gestión de gastos compartidos en pareja",
-  "start_url": "/casita/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f7f5f0",
   "theme_color": "#1a1a2e",
