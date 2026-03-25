@@ -655,10 +655,10 @@
       br.className = 'balance-result balance-ok'; br.innerHTML = '¡Están al día! No se deben nada. 🎉';
     } else if (diff > 0) {
       br.className = 'balance-result balance-warn';
-      br.innerHTML = `<strong>${cfg.name2}</strong> le debe a <strong>${cfg.name1}</strong><span class="balance-amount">${fmt(Math.abs(diff))}</span>`;
+      br.innerHTML = `<span style="font-size:13px;opacity:0.8;">Para equilibrar</span><span class="balance-amount">${cfg.name2} ➜ ${cfg.name1} · ${fmt(Math.abs(diff))}</span>`;
     } else {
       br.className = 'balance-result balance-warn';
-      br.innerHTML = `<strong>${cfg.name1}</strong> le debe a <strong>${cfg.name2}</strong><span class="balance-amount">${fmt(Math.abs(diff))}</span>`;
+      br.innerHTML = `<span style="font-size:13px;opacity:0.8;">Para equilibrar</span><span class="balance-amount">${cfg.name1} ➜ ${cfg.name2} · ${fmt(Math.abs(diff))}</span>`;
     }
 
     const area = document.getElementById('close-month-area');
@@ -722,7 +722,7 @@
       let badge, badgeClass;
       if (!isClosed) { badge = 'Abierto'; badgeClass = 'hist-open'; }
       else if (isOk) { badge = 'Al día ✓'; badgeClass = 'hist-ok'; }
-      else { badge = `${diff > 0 ? cfg.name2 : cfg.name1} debe ${fmt(Math.abs(diff))}`; badgeClass = 'hist-warn'; }
+      else { badge = `${diff > 0 ? cfg.name2 : cfg.name1} ➜ ${diff > 0 ? cfg.name1 : cfg.name2} · ${fmt(Math.abs(diff))}`; badgeClass = 'hist-warn'; }
       return `<div class="hist-row" onclick="goToMonth(${y},${m-1})" style="${isActive?'opacity:0.45;pointer-events:none':''}">
         <div>
           <div class="hist-name">${MONTHS[m-1]} ${y} ${isClosed ? '🔒' : ''}</div>
