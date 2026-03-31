@@ -41,6 +41,7 @@
     .month-label { font-size: 15px; font-weight: 500; color: var(--text); min-width: 150px; text-align: center; }
     .badge-now { font-size: 10px; background: var(--accent-light); color: var(--accent); border-radius: 99px; padding: 1px 6px; font-weight: 600; }
     .badge-closed { font-size: 10px; background: var(--bg2); color: var(--text3); border-radius: 99px; padding: 1px 6px; font-weight: 600; }
+    .badge-next { font-size: 10px; background: var(--amber-light); color: var(--amber); border-radius: 99px; padding: 1px 6px; font-weight: 600; }
     .tabs { display: flex; gap: 0; background: var(--bg2); border-radius: 99px; padding: 3px; }
     .tab { flex: 1; text-align: center; padding: 7px 4px; border-radius: 99px; font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; border: none; background: transparent; font-family: var(--font); transition: all 0.2s; }
     .tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
@@ -147,6 +148,7 @@
       <span class="month-label" id="month-label">—</span>
       <span class="badge-now" id="badge-now" style="display:none">hoy</span>
       <span class="badge-closed" id="badge-closed" style="display:none">🔒 cerrado</span>
+      <span class="badge-next" id="badge-next" style="display:none">próximo mes</span>
     </div>
     <button class="month-btn" onclick="changeMonth(1)" id="btn-next">›</button>
   </div>
@@ -323,6 +325,9 @@
   const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
   const mk = (y, m) => `${y}-${String(m+1).padStart(2,'0')}`;
   const isCurrentMonth = () => activeYear === now.getFullYear() && activeMonth === now.getMonth();
+  const maxYear = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+  const maxMonth = now.getMonth() === 11 ? 0 : now.getMonth() + 1;
+  const isMaxMonth = () => activeYear === maxYear && activeMonth === maxMonth;
   const activeKey = () => mk(activeYear, activeMonth);
   const isClosedMonth = () => !!closedMonths[activeKey()];
 
@@ -351,8 +356,8 @@
     document.getElementById('badge-now').style.display = isCurrent ? 'inline' : 'none';
     document.getElementById('badge-closed').style.display = (!isCurrent && isClosed) ? 'inline' : 'none';
     const btnNext = document.getElementById('btn-next');
-    btnNext.style.opacity = isCurrent ? '0.25' : '1';
-    btnNext.style.pointerEvents = isCurrent ? 'none' : 'auto';
+    btnNext.style.opacity = isMaxMonth() ? '0.25' : '1';
+    btnNext.style.pointerEvents = isMaxMonth() ? 'none' : 'auto';
     document.getElementById('list-title').textContent = `Gastos — ${MONTHS[activeMonth]} ${activeYear}`;
     document.getElementById('bal-title').textContent = `Balance — ${MONTHS[activeMonth]} ${activeYear}`;
     document.getElementById('form-card').style.display = isClosed ? 'none' : 'block';
@@ -365,8 +370,8 @@
     activeMonth += dir;
     if (activeMonth > 11) { activeMonth = 0; activeYear++; }
     if (activeMonth < 0)  { activeMonth = 11; activeYear--; }
-    if (activeYear > now.getFullYear() || (activeYear === now.getFullYear() && activeMonth > now.getMonth())) {
-      activeYear = now.getFullYear(); activeMonth = now.getMonth();
+    if (activeYear > maxYear || (activeYear === maxYear && activeMonth > maxMonth)) {
+      activeYear = maxYear; activeMonth = maxMonth;
     }
     updateMonthUI();
   };
