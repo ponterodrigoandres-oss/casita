@@ -94,6 +94,10 @@
     .pie-legend-name { flex: 1; font-size: 13px; }
     .pie-legend-pct { font-size: 11px; color: var(--text3); margin-right: 4px; }
     .pie-legend-amt { font-size: 13px; font-weight: 500; font-family: var(--font-display); }
+    /* MEDIO DE PAGO */
+    .pay-badge { font-size: 10px; padding: 1px 7px; border-radius: 99px; font-weight: 600; margin-left: 4px; }
+    .pay-debito { background: #dbeafe; color: #1d4ed8; }
+    .pay-credito { background: #fce7f3; color: #9d174d; }
     /* GASTOS */
     .expense-item { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
     .expense-item:last-child { border-bottom: none; }
@@ -185,7 +189,15 @@
         </div>
         <div class="field"><label>¿Quién pagó?</label><select id="exp-payer"></select></div>
       </div>
-      <div class="field"><label>Notas</label><input type="text" id="exp-notes" placeholder="Opcional" /></div>
+      <div class="row2">
+        <div class="field"><label>Notas</label><input type="text" id="exp-notes" placeholder="Opcional" /></div>
+        <div class="field"><label>Medio de pago</label>
+          <select id="exp-payment">
+            <option value="debito">🏦 Débito</option>
+            <option value="credito">💳 Crédito</option>
+          </select>
+        </div>
+      </div>
       <button class="btn btn-primary" id="btn-add" onclick="addExpense()">+ Agregar gasto</button>
     </div>
     <div id="closed-notice-gastos" style="display:none;" class="card">
@@ -208,6 +220,8 @@
         <div class="metric metric-full"><div class="metric-label">Total gastado</div><div class="metric-value" id="m-total">$0</div></div>
         <div class="metric"><div class="metric-label" id="m-p1-lbl">Persona 1 pagó</div><div class="metric-value" id="m-p1-paid">$0</div></div>
         <div class="metric"><div class="metric-label" id="m-p2-lbl">Persona 2 pagó</div><div class="metric-value" id="m-p2-paid">$0</div></div>
+        <div class="metric"><div class="metric-label">🏦 Débito (este mes)</div><div class="metric-value" id="m-debito">$0</div></div>
+        <div class="metric"><div class="metric-label">💳 Crédito (mes anterior)</div><div class="metric-value" id="m-credito">$0</div></div>
       </div>
     </div>
     <div class="card">
@@ -500,6 +514,7 @@
         payer: document.getElementById('exp-payer').value,
         notes: document.getElementById('exp-notes').value.trim(),
         monthKey: activeKey(),
+        payment: document.getElementById('exp-payment').value,
         createdAt: serverTimestamp()
       });
       document.getElementById('exp-desc').value = '';
@@ -529,20 +544,43 @@
       const who = e.payer === '1' ? cfg.name1 : cfg.name2;
       const icon = CATS[e.cat] || '📦';
       const meta = [who, e.notes].filter(Boolean).join(' · ');
+      const payBadge = e.payment === 'credito'
+        ? '<span class="pay-badge pay-credito">💳 Crédito</span>'
+        : '<span class="pay-badge pay-debito">🏦 Débito</span>';
       const delBtn = closed ? '' : `<button class="exp-delete" onclick="deleteExpense('${e.id}')">✕</button>`;
       return `<div class="expense-item">
         <div class="exp-icon">${icon}</div>
         <div class="exp-body">
-          <div class="exp-top"><span class="exp-desc">${e.desc}</span><span class="exp-amount">${fmt(e.amount)}</span></div>
+          <div class="exp-top"><span class="exp-desc">${e.desc}${payBadge}</span><span class="exp-amount">${fmt(e.amount)}</span></div>
           <div class="exp-meta">${meta}</div>
         </div>${delBtn}
       </div>`;
     }).join('');
   }
 
+  function prevMonthKey(key) {
+    const [y, m] = key.split('-').map(Number);
+    if (m === 1) return `${y-1}-12`;
+    return `${y}-${String(m-1).padStart(2,'0')}`;
+  }
+
+  // Gastos que impactan en un mes dado:
+  // - Débito registrado en ese mes
+  // - Crédito registrado en el mes ANTERIOR (se cobra este mes)
+  function expensesImpactingMonth(key) {
+    const prevKey = prevMonthKey(key);
+    return allExpenses.filter(e => {
+      if (!e.payment || e.payment === 'debito') return e.monthKey === key;
+      return e.monthKey === prevKey; // crédito del mes anterior impacta acá
+    });
+  }
+
   function calcBal(exps, key) {
+    // exps puede ser pasado (para historial) o calculado dinámicamente
+    // Para el balance real usamos expensesImpactingMonth
+    const impacting = expensesImpactingMonth(key);
     let p1 = 0, p2 = 0;
-    exps.forEach(e => { if (e.payer === '1') p1 += e.amount; else p2 += e.amount; });
+    impacting.forEach(e => { if (e.payer === '1') p1 += e.amount; else p2 += e.amount; });
     const total = p1+p2;
     const { s1, s2 } = getShares(key);
     const sh1 = total*s1, sh2 = total*s2;
@@ -640,11 +678,20 @@
     const isClosed = isClosedMonth();
     const isCurrent = isCurrentMonth();
 
+    // Calcular totales débito/crédito del mes visible
+    const prevKey = prevMonthKey(key);
+    const debitoExps = allExpenses.filter(e => e.monthKey === key && (!e.payment || e.payment === 'debito'));
+    const creditoExps = allExpenses.filter(e => e.monthKey === prevKey && e.payment === 'credito');
+    const totalDebito = debitoExps.reduce((s,e) => s+e.amount, 0);
+    const totalCredito = creditoExps.reduce((s,e) => s+e.amount, 0);
+
     document.getElementById('m-total').textContent = fmt(total);
     document.getElementById('m-p1-lbl').textContent = cfg.name1 + ' pagó';
     document.getElementById('m-p2-lbl').textContent = cfg.name2 + ' pagó';
     document.getElementById('m-p1-paid').textContent = fmt(p1);
     document.getElementById('m-p2-paid').textContent = fmt(p2);
+    document.getElementById('m-debito').textContent = fmt(totalDebito);
+    document.getElementById('m-credito').textContent = fmt(totalCredito);
     document.getElementById('s-p1-lbl').textContent = cfg.name1 + ' debería';
     document.getElementById('s-p2-lbl').textContent = cfg.name2 + ' debería';
     document.getElementById('s-p1').textContent = fmt(sh1);
