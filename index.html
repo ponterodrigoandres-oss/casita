@@ -98,6 +98,12 @@
     .pay-badge { font-size: 10px; padding: 1px 7px; border-radius: 99px; font-weight: 600; margin-left: 4px; }
     .pay-debito { background: #dbeafe; color: #1d4ed8; }
     .pay-credito { background: #fce7f3; color: #9d174d; }
+    .pay-toggle { display: flex; gap: 8px; margin-bottom: 0; }
+    .pay-btn { flex: 1; padding: 10px; font-size: 13px; font-weight: 500; border-radius: var(--radius-sm); border: 1px solid var(--border2); background: var(--bg); color: var(--text2); cursor: pointer; font-family: var(--font); transition: all .15s; }
+    .pay-btn.sel-D { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+    .pay-btn.sel-C { background: #fce7f3; border-color: #f9a8d4; color: #9d174d; }
+    #cuotas-field { display: none; }
+    .inst-badge { font-size: 10px; padding: 1px 7px; border-radius: 99px; font-weight: 600; margin-left: 4px; background: #dbeafe; color: #1d6fa5; }
     /* GASTOS */
     .expense-item { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
     .expense-item:last-child { border-bottom: none; }
@@ -189,14 +195,26 @@
         </div>
         <div class="field"><label>¿Quién pagó?</label><select id="exp-payer"></select></div>
       </div>
-      <div class="row2">
-        <div class="field"><label>Notas</label><input type="text" id="exp-notes" placeholder="Opcional" /></div>
-        <div class="field"><label>Medio de pago</label>
-          <select id="exp-payment">
-            <option value="debito">🏦 Débito</option>
-            <option value="credito">💳 Crédito</option>
-          </select>
+      <div class="field"><label>Notas</label><input type="text" id="exp-notes" placeholder="Opcional" /></div>
+      <div class="field">
+        <label>Medio de pago</label>
+        <div class="pay-toggle">
+          <button class="pay-btn" id="btn-D" type="button" onclick="selPay('debito')">🏦 Débito</button>
+          <button class="pay-btn" id="btn-C" type="button" onclick="selPay('credito')">💳 Crédito</button>
         </div>
+      </div>
+      <div class="field" id="cuotas-field">
+        <label>Cantidad de cuotas</label>
+        <select id="exp-cuotas">
+          <option value="1">1 cuota</option>
+          <option value="2">2 cuotas</option>
+          <option value="3">3 cuotas</option>
+          <option value="6">6 cuotas</option>
+          <option value="9">9 cuotas</option>
+          <option value="12">12 cuotas</option>
+          <option value="18">18 cuotas</option>
+          <option value="24">24 cuotas</option>
+        </select>
       </div>
       <button class="btn btn-primary" id="btn-add" onclick="addExpense()">+ Agregar gasto</button>
     </div>
@@ -397,7 +415,18 @@
   };
 
   function filtered() {
-    return allExpenses.filter(e => e.monthKey === activeKey());
+    const key = activeKey();
+    const res = [];
+    allExpenses.forEach(e => {
+      if (e.installments && e.installments.length > 1) {
+        // gasto en cuotas: mostrar la cuota del mes activo
+        const inst = e.installments.find(i => i.monthKey === key);
+        if (inst) res.push({ ...e, amount: inst.amount, instLabel: inst.label, isInst: true });
+      } else {
+        if (e.monthKey === key) res.push(e);
+      }
+    });
+    return res;
   }
 
   // CONFIG
@@ -491,6 +520,15 @@
   };
 
   // GASTOS
+  let selPayType = null;
+
+  window.selPay = function(type) {
+    selPayType = type;
+    document.getElementById('btn-D').className = 'pay-btn' + (type === 'debito' ? ' sel-D' : '');
+    document.getElementById('btn-C').className = 'pay-btn' + (type === 'credito' ? ' sel-C' : '');
+    document.getElementById('cuotas-field').style.display = type === 'credito' ? 'block' : 'none';
+  };
+
   function listenExpenses() {
     const q = query(collection(db, 'expenses'), orderBy('createdAt', 'desc'));
     onSnapshot(q, snap => {
@@ -505,8 +543,25 @@
     const desc = document.getElementById('exp-desc').value.trim();
     const amount = parseFloat(document.getElementById('exp-amount').value);
     if (!desc || !amount || amount <= 0) { showToast('Completá descripción y monto'); return; }
+    if (!selPayType) { showToast('Seleccioná un medio de pago'); return; }
+    const cuotas = parseInt(document.getElementById('exp-cuotas').value) || 1;
+    const payment = selPayType;
     const btn = document.getElementById('btn-add');
     btn.disabled = true; btn.textContent = 'Guardando...';
+
+    // Armar installments si es crédito en cuotas
+    const [ky, km] = activeKey().split('-').map(Number);
+    const installments = [];
+    if (payment === 'credito' && cuotas > 0) {
+      const iaAmt = amount / cuotas;
+      // i arranca en 1: todas las cuotas impactan desde el mes siguiente
+      for (let i = 1; i <= cuotas; i++) {
+        const im = ((km - 1 + i) % 12) + 1;
+        const iy = ky + Math.floor((km - 1 + i) / 12);
+        installments.push({ monthKey: mk(iy, im - 1), amount: iaAmt, label: `${i}/${cuotas}` });
+      }
+    }
+
     try {
       await addDoc(collection(db, 'expenses'), {
         desc, amount,
@@ -514,12 +569,19 @@
         payer: document.getElementById('exp-payer').value,
         notes: document.getElementById('exp-notes').value.trim(),
         monthKey: activeKey(),
-        payment: document.getElementById('exp-payment').value,
+        payment,
+        totalCuotas: cuotas,
+        installments,
         createdAt: serverTimestamp()
       });
       document.getElementById('exp-desc').value = '';
       document.getElementById('exp-amount').value = '';
       document.getElementById('exp-notes').value = '';
+      document.getElementById('exp-cuotas').value = '1';
+      selPayType = null;
+      document.getElementById('btn-D').className = 'pay-btn';
+      document.getElementById('btn-C').className = 'pay-btn';
+      document.getElementById('cuotas-field').style.display = 'none';
       showToast('Gasto agregado ✓');
     } catch(e) { showToast('Error al guardar'); }
     btn.disabled = false; btn.textContent = '+ Agregar gasto';
@@ -547,11 +609,14 @@
       const payBadge = e.payment === 'credito'
         ? '<span class="pay-badge pay-credito">💳 Crédito</span>'
         : '<span class="pay-badge pay-debito">🏦 Débito</span>';
+      const instBadge = e.isInst
+        ? `<span class="inst-badge">Cuota ${e.instLabel}</span>`
+        : (e.totalCuotas > 1 ? `<span class="inst-badge">Cuota 1/${e.totalCuotas}</span>` : '');
       const delBtn = closed ? '' : `<button class="exp-delete" onclick="deleteExpense('${e.id}')">✕</button>`;
       return `<div class="expense-item">
         <div class="exp-icon">${icon}</div>
         <div class="exp-body">
-          <div class="exp-top"><span class="exp-desc">${e.desc}${payBadge}</span><span class="exp-amount">${fmt(e.amount)}</span></div>
+          <div class="exp-top"><span class="exp-desc">${e.desc}${payBadge}${instBadge}</span><span class="exp-amount">${fmt(e.amount)}</span></div>
           <div class="exp-meta">${meta}</div>
         </div>${delBtn}
       </div>`;
@@ -569,10 +634,23 @@
   // - Crédito registrado en el mes ANTERIOR (se cobra este mes)
   function expensesImpactingMonth(key) {
     const prevKey = prevMonthKey(key);
-    return allExpenses.filter(e => {
-      if (!e.payment || e.payment === 'debito') return e.monthKey === key;
-      return e.monthKey === prevKey; // crédito del mes anterior impacta acá
+    const res = [];
+    allExpenses.forEach(e => {
+      // Débito: impacta en su propio mes siempre
+      if (!e.payment || e.payment === 'debito') {
+        if (e.monthKey === key) res.push(e);
+        return;
+      }
+      // Crédito con installments (1 o más cuotas): cada cuota tiene su mes
+      if (e.installments && e.installments.length > 0) {
+        const inst = e.installments.find(i => i.monthKey === key);
+        if (inst) res.push({ ...e, amount: inst.amount, instLabel: inst.label, isInst: true });
+        return;
+      }
+      // Crédito legacy sin installments (datos viejos): impacta en el mes siguiente
+      if (e.monthKey === prevKey) res.push(e);
     });
+    return res;
   }
 
   function calcBal(exps, key) {
